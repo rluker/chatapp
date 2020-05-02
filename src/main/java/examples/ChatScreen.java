@@ -16,6 +16,7 @@ import javax.swing.*;
 import javax.swing.border.*;
 import java.io.*;
 import java.net.*;
+import java.time.Instant;
 
 
 public class ChatScreen extends JFrame implements ActionListener, KeyListener
@@ -24,8 +25,15 @@ public class ChatScreen extends JFrame implements ActionListener, KeyListener
 	private JButton exitButton;
 	private JTextField sendText;
 	private JTextArea displayArea;
+	private Socket socket;
+	private OutputStream outputStream;
+	private String currentUser;
 
-	public ChatScreen() {
+	public ChatScreen( Socket socket, String currentUser ) {
+		this.socket = socket;
+		this.currentUser = currentUser;
+		try {this.outputStream = socket.getOutputStream(); } catch (IOException e ) { }
+
 		/**
 		 * a panel used for placing components
 		 */
@@ -85,6 +93,17 @@ public class ChatScreen extends JFrame implements ActionListener, KeyListener
 		/** anonymous inner class to handle window closing events */
 		addWindowListener(new WindowAdapter() {
 			public void windowClosing(WindowEvent evt) {
+				String newline = "\r\n\r\n";
+				String status = "status: 300"  + "\r\n";
+				String date = "date: " + Instant.now().toString() + "\r\n"; // need to format to UTC
+				String from = "from: " + currentUser  + "\r\n";
+				String header = status + date + from + newline;
+
+				try {
+					outputStream.write(header.getBytes());
+					outputStream.flush();
+				} catch (IOException e) {}
+
 				System.exit(0);
 			}
 		} );
@@ -99,18 +118,56 @@ public class ChatScreen extends JFrame implements ActionListener, KeyListener
 	}
 
 	/**
+	 * Displays a join message
+	 */
+	public void displayJoin() {
+		displayArea.append("[" + currentUser + " has joined the chat.]"+ "\n");
+	}
+
+	/**
+	 * Displays an exit message
+	 */
+	public void displayExit() {
+		displayArea.append("[" + currentUser + " has left the chat.]"+ "\n");
+	}
+
+	public void exit() {
+		System.exit(0);
+	}
+
+	/**
 	 * This gets the text the user entered and outputs it
 	 * in the display area.
 	 */
-	public void displayText() {
+	public void packageGmMessageText() {
 		String message = sendText.getText().trim();
-		StringBuffer buffer = new StringBuffer(message.length());
 
-		// now reverse it
-		for (int i = message.length()-1; i >= 0; i--)
-			buffer.append(message.charAt(i));
+		String header = null;;
+		String newline = "\r\n\r\n";
+		String status = "status: 202"  + "\r\n";
+		String date = "date: " + Instant.now().toString() + "\r\n"; // need to format to UTC
+		String from = "from: " + currentUser  + "\r\n";
+		String toUser = "";
+		String content = "";
 
-		displayArea.append(buffer.toString() + "\n");
+		for (int i = 0; i < message.length(); i++) {
+			content += message.charAt(i);
+		}
+		content += "\r\n";
+
+		if(content.contains("@")) {
+			status = "status: 203"  + "\r\n";
+			if (content.indexOf(" ") > -1) {
+				toUser = "to: " + content.substring(content.indexOf("@")+1, content.indexOf(" ")) + "\r\n";
+			}
+		}
+
+		header = status + date + from + toUser + content + newline;
+
+		try {
+			outputStream.write(header.getBytes());
+			outputStream.flush();
+		} catch (IOException e) {}
 
 		sendText.setText("");
 		sendText.requestFocus();
@@ -125,9 +182,21 @@ public class ChatScreen extends JFrame implements ActionListener, KeyListener
 		Object source = evt.getSource();
 
 		if (source == sendButton) 
-			displayText();
-		else if (source == exitButton)
+			packageGmMessageText();
+		else if (source == exitButton) {
+			String newline = "\r\n\r\n";
+			String status = "status: 300"  + "\r\n";
+			String date = "date: " + Instant.now().toString() + "\r\n"; // need to format to UTC
+			String from = "from: " + currentUser  + "\r\n";
+			String header = status + date + from + newline;
+
+			try {  
+				outputStream.write(header.getBytes());
+				outputStream.flush();
+			} catch (IOException e) {}
+
 			System.exit(0);
+		}
 	}
 
 	/**
@@ -141,7 +210,7 @@ public class ChatScreen extends JFrame implements ActionListener, KeyListener
 	 */
 	public void keyPressed(KeyEvent e) { 
 		if (e.getKeyCode() == KeyEvent.VK_ENTER)
-			displayText();
+		packageGmMessageText();
 	}
 
 	/** Not implemented */
@@ -151,19 +220,21 @@ public class ChatScreen extends JFrame implements ActionListener, KeyListener
 	public void keyTyped(KeyEvent e) {  }
 
 
-	public static void main(String[] args) {
-		try {
-			Socket annoying = new Socket(args[0], 6008);
-			ChatScreen win = new ChatScreen();
-			win.displayMessage("My name is " + args[1]);
+	// public static void main(String[] args) {
+	// 	try {
+	// 		System.out.println("Check - The Chat Screen Class - Part 1");
+	// 		Socket annoying = new Socket(args[0], 7331);
+	// 		ChatScreen win = new ChatScreen();
+	// 		win.displayMessage("My name is " + args[1]);
 
-			Thread ReaderThread = new Thread(new ReaderThread(annoying, win));
+	// 		System.out.println("Check - The Chat Screen Class");
+	// 		Thread ReaderThread = new Thread(new ReaderThread(annoying, win));
 
-			ReaderThread.start();
-		}
-		catch (UnknownHostException uhe) { System.out.println(uhe); }
-		catch (IOException ioe) { System.out.println(ioe); }
+	// 		ReaderThread.start();
+	// 	}
+	// 	catch (UnknownHostException uhe) { System.out.println(uhe); }
+	// 	catch (IOException ioe) { System.out.println(ioe); }
 
 
-	}
+	// }
 }
